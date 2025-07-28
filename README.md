@@ -37,6 +37,7 @@ This was built purely for experimentation — as a fun side project to visualize
 ---
 
 ## 📸 Screenshot
+<img width="1750" height="2046" alt="image" src="https://github.com/user-attachments/assets/3ecba845-52cc-4165-8bf3-72568c9d3a75" />
 
 ---
 
