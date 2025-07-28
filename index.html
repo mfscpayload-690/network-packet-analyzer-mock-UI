@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Packet Analyzer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .file-upload {
+            border: 2px dashed #cbd5e0;
+            transition: all 0.3s ease;
+        }
+        .file-upload:hover {
+            border-color: #4f46e5;
+        }
+        .file-upload.dragover {
+            background-color: #f0f9ff;
+            border-color: #4f46e5;
+        }
+        .protocol-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .packet-details {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .packet-row:hover {
+            background-color: #f8fafc;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #c7d2fe;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a5b4fc;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="mb-8">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold text-indigo-800">Network Packet Analyzer</h1>
+                    <p class="text-gray-600">Analyze PCAP, CSV, and text files containing network packet captures</p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="help-btn" class="p-2 rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 transition">
+                        <i class="fas fa-question-circle"></i>
+                    </button>
+                    <button id="settings-btn" class="p-2 rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 transition">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- File Upload Section -->
+            <div class="lg:col-span-1 bg-white rounded-xl shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">Upload Capture File</h2>
+                
+                <div id="file-upload" class="file-upload rounded-lg p-8 text-center cursor-pointer mb-4">
+                    <div class="flex flex-col items-center justify-center space-y-2">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-indigo-500"></i>
+                        <p class="text-gray-600">Drag & drop your file here</p>
+                        <p class="text-sm text-gray-500">or</p>
+                        <button id="browse-btn" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition">
+                            Browse Files
+                        </button>
+                    </div>
+                    <input type="file" id="file-input" class="hidden" accept=".pcap,.csv,.txt">
+                </div>
+                
+                <div class="mt-4">
+                    <h3 class="font-medium text-gray-700 mb-2">Supported Formats</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="protocol-tag bg-blue-100 text-blue-800">
+                            <i class="fas fa-file-alt mr-1"></i> PCAP
+                        </span>
+                        <span class="protocol-tag bg-green-100 text-green-800">
+                            <i class="fas fa-file-csv mr-1"></i> CSV
+                        </span>
+                        <span class="protocol-tag bg-purple-100 text-purple-800">
+                            <i class="fas fa-file-alt mr-1"></i> TXT
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="mt-6">
+                    <h3 class="font-medium text-gray-700 mb-2">Analysis Options</h3>
+                    <div class="space-y-2">
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" id="deep-analysis" class="rounded text-indigo-600">
+                            <span>Deep Packet Inspection</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" id="geo-lookup" class="rounded text-indigo-600" checked>
+                            <span>Geo IP Lookup</span>
+                        </label>
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" id="threat-detection" class="rounded text-indigo-600" checked>
+                            <span>Threat Detection</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <button id="analyze-btn" class="w-full mt-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition flex items-center justify-center space-x-2 disabled:opacity-50" disabled>
+                    <i class="fas fa-search"></i>
+                    <span>Analyze</span>
+                </button>
+            </div>
+            
+            <!-- Analysis Results -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-white rounded-xl shadow-md p-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">Total Packets</p>
+                                <h3 id="total-packets" class="text-2xl font-bold text-gray-800">0</h3>
+                            </div>
+                            <div class="p-3 rounded-full bg-indigo-100 text-indigo-600">
+                                <i class="fas fa-network-wired"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-md p-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">Protocols</p>
+                                <h3 id="protocol-count" class="text-2xl font-bold text-gray-800">0</h3>
+                            </div>
+                            <div class="p-3 rounded-full bg-green-100 text-green-600">
+                                <i class="fas fa-project-diagram"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-md p-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">Threats</p>
+                                <h3 id="threat-count" class="text-2xl font-bold text-gray-800">0</h3>
+                            </div>
+                            <div class="p-3 rounded-full bg-red-100 text-red-600">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Protocol Distribution Chart -->
+                <div class="bg-white rounded-xl shadow-md p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-semibold text-gray-800">Protocol Distribution</h2>
+                        <div class="flex space-x-2">
+                            <button id="chart-toggle" class="px-3 py-1 text-sm bg-gray-100 rounded-md hover:bg-gray-200 transition">
+                                <i class="fas fa-chart-pie mr-1"></i> Pie
+                            </button>
+                        </div>
+                    </div>
+                    <div class="h-64">
+                        <canvas id="protocol-chart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Packet List -->
+                <div class="bg-white rounded-xl shadow-md p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-semibold text-gray-800">Packet Details</h2>
+                        <div class="relative">
+                            <input type="text" id="packet-search" placeholder="Search packets..." class="pl-8 pr-4 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No.</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Source</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Destination</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Protocol</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Length</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Info</th>
+                                </tr>
+                            </thead>
+                            <tbody id="packet-table-body" class="bg-white divide-y divide-gray-200 packet-details">
+                                <tr>
+                                    <td colspan="7" class="px-6 py-4 text-center text-gray-500">Upload a file to analyze network packets</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="mt-4 flex items-center justify-between">
+                        <div class="text-sm text-gray-500">
+                            Showing <span id="packet-start">0</span> to <span id="packet-end">0</span> of <span id="packet-total">0</span> packets
+                        </div>
+                        <div class="flex space-x-2">
+                            <button id="prev-page" class="px-3 py-1 border rounded-md text-sm disabled:opacity-50" disabled>
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <button id="next-page" class="px-3 py-1 border rounded-md text-sm disabled:opacity-50" disabled>
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Threat Analysis -->
+                <div id="threat-analysis" class="bg-white rounded-xl shadow-md p-6 hidden">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4">Threat Analysis</h2>
+                    <div id="threat-list" class="space-y-3">
+                        <!-- Threats will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="help-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-bold text-gray-800">Help & Documentation</h3>
+                    <button id="close-help" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="space-y-4">
+                    <div>
+                        <h4 class="font-medium text-gray-800 mb-2">Supported File Formats</h4>
+                        <ul class="list-disc pl-5 space-y-1 text-gray-600">
+                            <li><strong>PCAP</strong> - Packet capture files from tools like Wireshark or tcpdump</li>
+                            <li><strong>CSV</strong> - Comma-separated values with packet data (timestamp, source, destination, protocol, etc.)</li>
+                            <li><strong>TXT</strong> - Plain text files with packet information in a structured format</li>
+                        </ul>
+                    </div>
+                    
+                    <div>
+                        <h4 class="font-medium text-gray-800 mb-2">Analysis Features</h4>
+                        <ul class="list-disc pl-5 space-y-1 text-gray-600">
+                            <li><strong>Protocol Distribution</strong> - Visual breakdown of different network protocols in your capture</li>
+                            <li><strong>Packet Details</strong> - Comprehensive view of individual packets with filtering capabilities</li>
+                            <li><strong>Threat Detection</strong> - Identification of potential security threats in the network traffic</li>
+                            <li><strong>Geo IP Lookup</strong> - Geographic location mapping of IP addresses (when enabled)</li>
+                        </ul>
+                    </div>
+                    
+                    <div>
+                        <h4 class="font-medium text-gray-800 mb-2">Usage Tips</h4>
+                        <ul class="list-disc pl-5 space-y-1 text-gray-600">
+                            <li>For best results with PCAP files, ensure they're not too large (&lt;50MB recommended)</li>
+                            <li>Use the search function to quickly find specific packets by IP, protocol, or other criteria</li>
+                            <li>Enable "Deep Packet Inspection" for more detailed analysis of packet contents</li>
+                            <li>Click on any packet row to view more detailed information</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Packet Detail Modal -->
+    <div id="packet-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-bold text-gray-800">Packet Details</h3>
+                    <button id="close-packet" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div class="bg-gray-50 p-3 rounded-lg">
+                            <p class="text-sm text-gray-500">Source</p>
+                            <p id="modal-source" class="font-mono">192.168.1.100:54321</p>
+                        </div>
+                        <div class="bg-gray-50 p-3 rounded-lg">
+                            <p class="text-sm text-gray-500">Destination</p>
+                            <p id="modal-dest" class="font-mono">8.8.8.8:53</p>
+                        </div>
+                        <div class="bg-gray-50 p-3 rounded-lg">
+                            <p class="text-sm text-gray-500">Protocol</p>
+                            <p id="modal-protocol" class="font-mono">UDP</p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div class="bg-gray-50 p-3 rounded-lg">
+                            <p class="text-sm text-gray-500">Timestamp</p>
+                            <p id="modal-time" class="font-mono">2023-07-15 14:32:45.123456</p>
+                        </div>
+                        <div class="bg-gray-50 p-3 rounded-lg">
+                            <p class="text-sm text-gray-500">Length</p>
+                            <p id="modal-length" class="font-mono">78 bytes</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h4 class="font-medium text-gray-800 mb-2">Packet Contents</h4>
+                    <div class="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto">
+                        <pre id="modal-contents" class="font-mono text-sm whitespace-pre-wrap"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const fileUpload = document.getElementById('file-upload');
+        const fileInput = document.getElementById('file-input');
+        const browseBtn = document.getElementById('browse-btn');
+        const analyzeBtn = document.getElementById('analyze-btn');
+        const helpBtn = document.getElementById('help-btn');
+        const helpModal = document.getElementById('help-modal');
+        const closeHelp = document.getElementById('close-help');
+        const packetModal = document.getElementById('packet-modal');
+        const closePacket = document.getElementById('close-packet');
+        const chartToggle = document.getElementById('chart-toggle');
+        const packetSearch = document.getElementById('packet-search');
+        const prevPage = document.getElementById('prev-page');
+        const nextPage = document.getElementById('next-page');
+        const threatAnalysis = document.getElementById('threat-analysis');
+        
+        // State
+        let currentFile = null;
+        let packets = [];
+        let filteredPackets = [];
+        let currentPage = 1;
+        const packetsPerPage = 10;
+        let chartType = 'pie';
+        let protocolChart = null;
+        
+        // Event Listeners
+        browseBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', handleFileSelect);
+        
+        fileUpload.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileUpload.classList.add('dragover');
+        });
+        
+        fileUpload.addEventListener('dragleave', () => {
+            fileUpload.classList.remove('dragover');
+        });
+        
+        fileUpload.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileUpload.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                handleFileSelect({ target: fileInput });
+            }
+        });
+        
+        analyzeBtn.addEventListener('click', analyzeFile);
+        helpBtn.addEventListener('click', () => helpModal.classList.remove('hidden'));
+        closeHelp.addEventListener('click', () => helpModal.classList.add('hidden'));
+        closePacket.addEventListener('click', () => packetModal.classList.add('hidden'));
+        
+        chartToggle.addEventListener('click', toggleChartType);
+        packetSearch.addEventListener('input', filterPackets);
+        prevPage.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                renderPacketTable();
+            }
+        });
+        nextPage.addEventListener('click', () => {
+            if (currentPage < Math.ceil(filteredPackets.length / packetsPerPage)) {
+                currentPage++;
+                renderPacketTable();
+            }
+        });
+        
+        // Functions
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            currentFile = file;
+            analyzeBtn.disabled = false;
+            
+            // Update UI to show selected file
+            const fileUpload = document.getElementById('file-upload');
+            fileUpload.innerHTML = `
+                <div class="flex flex-col items-center justify-center space-y-2">
+                    <i class="fas fa-file-alt text-4xl text-indigo-500"></i>
+                    <p class="font-medium text-gray-800">${file.name}</p>
+                    <p class="text-sm text-gray-500">${formatFileSize(file.size)}</p>
+                    <button id="change-file" class="px-3 py-1 text-sm text-indigo-600 hover:text-indigo-800">
+                        Change file
+                    </button>
+                </div>
+            `;
+            
+            document.getElementById('change-file').addEventListener('click', () => fileInput.click());
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function analyzeFile() {
+            if (!currentFile) return;
+            
+            analyzeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+            analyzeBtn.disabled = true;
+            
+            // Simulate analysis (in a real app, you'd process the file here)
+            setTimeout(() => {
+                // Generate mock data for demonstration
+                packets = generateMockPackets();
+                filteredPackets = [...packets];
+                
+                // Update UI with results
+                updateSummaryCards();
+                renderProtocolChart();
+                renderPacketTable();
+                
+                // Check for threats
+                checkForThreats();
+                
+                analyzeBtn.innerHTML = '<i class="fas fa-search"></i> Analyze';
+                analyzeBtn.disabled = false;
+            }, 1500);
+        }
+        
+        function generateMockPackets() {
+            const protocols = ['TCP', 'UDP', 'HTTP', 'HTTPS', 'DNS', 'ICMP', 'ARP'];
+            const mockPackets = [];
+            
+            for (let i = 0; i < 50; i++) {
+                const sourceIp = `192.168.1.${Math.floor(Math.random() * 254) + 1}`;
+                const destIp = `${Math.floor(Math.random() * 223) + 1}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 254) + 1}`;
+                const sourcePort = Math.floor(Math.random() * 65535);
+                const destPort = Math.floor(Math.random() * 65535);
+                const protocol = protocols[Math.floor(Math.random() * protocols.length)];
+                const length = Math.floor(Math.random() * 1500) + 50;
+                const timestamp = new Date(Date.now() - Math.floor(Math.random() * 3600000)).toISOString();
+                
+                mockPackets.push({
+                    id: i + 1,
+                    time: timestamp,
+                    source: `${sourceIp}:${sourcePort}`,
+                    destination: `${destIp}:${destPort}`,
+                    protocol: protocol,
+                    length: length,
+                    info: generatePacketInfo(protocol, sourceIp, destIp),
+                    contents: generatePacketContents(protocol, length)
+                });
+            }
+            
+            // Add some potential threats
+            mockPackets.push({
+                id: mockPackets.length + 1,
+                time: new Date().toISOString(),
+                source: `192.168.1.100:54321`,
+                destination: `45.33.12.42:4444`,
+                protocol: 'TCP',
+                length: 1024,
+                info: 'Potential reverse shell detected',
+                contents: 'SYN packet to known malicious IP with suspicious port',
+                isThreat: true,
+                threatType: 'Reverse Shell'
+            });
+            
+            mockPackets.push({
+                id: mockPackets.length + 1,
+                time: new Date().toISOString(),
+                source: `10.0.0.5:1234`,
+                destination: `192.168.1.1:80`,
+                protocol: 'HTTP',
+                length: 2048,
+                info: 'Possible SQL injection attempt',
+                contents: 'GET /login.php?user=admin\'-- HTTP/1.1',
+                isThreat: true,
+                threatType: 'SQL Injection'
+            });
+            
+            return mockPackets;
+        }
+        
+        function generatePacketInfo(protocol, sourceIp, destIp) {
+            const actions = {
+                'TCP': ['SYN', 'ACK', 'FIN', 'RST', 'PSH'],
+                'UDP': ['DNS query', 'NTP request', 'DHCP', 'SNMP'],
+                'HTTP': ['GET', 'POST', 'PUT', 'DELETE'],
+                'HTTPS': ['TLS Handshake', 'Encrypted traffic'],
+                'DNS': ['Query', 'Response'],
+                'ICMP': ['Echo request', 'Echo reply', 'Destination unreachable'],
+                'ARP': ['Request', 'Reply']
+            };
+            
+            const action = actions[protocol][Math.floor(Math.random() * actions[protocol].length)];
+            return `${action} ${protocol === 'DNS' ? 'for' : 'to'} ${destIp}`;
+        }
+        
+        function generatePacketContents(protocol, length) {
+            const contents = {
+                'TCP': `4500 ${length} 1a2b 4000 4006 a1b2 ${generateHex(length - 20)}`,
+                'UDP': `${generateHex(8)} ${generateHex(length - 8)}`,
+                'HTTP': `GET /index.html HTTP/1.1\r\nHost: example.com\r\nUser-Agent: MockBrowser/1.0\r\nAccept: */*\r\n\r\n`,
+                'HTTPS': `16 03 01 ${generateHex(length - 5, 2)} 01 ${generateHex(length - 6, 2)}`,
+                'DNS': `${generateHex(12)} ${generateHex(length - 12)}`,
+                'ICMP': `08 00 ${generateHex(length - 2)}`,
+                'ARP': `0001 0800 06 04 0001 ${generateHex(length - 8)}`
+            };
+            
+            return contents[protocol] || `Raw packet data (${length} bytes)`;
+        }
+        
+        function generateHex(length, bytesPerGroup = 4) {
+            const hexChars = '0123456789abcdef';
+            let result = '';
+            const groups = Math.ceil(length / bytesPerGroup);
+            
+            for (let i = 0; i < groups; i++) {
+                for (let j = 0; j < bytesPerGroup; j++) {
+                    if (i * bytesPerGroup + j < length) {
+                        result += hexChars[Math.floor(Math.random() * 16)];
+                        result += hexChars[Math.floor(Math.random() * 16)];
+                        if (j < bytesPerGroup - 1) result += ' ';
+                    }
+                }
+                if (i < groups - 1) result += ' ';
+            }
+            
+            return result;
+        }
+        
+        function updateSummaryCards() {
+            document.getElementById('total-packets').textContent = packets.length;
+            
+            // Count unique protocols
+            const protocolSet = new Set(packets.map(p => p.protocol));
+            document.getElementById('protocol-count').textContent = protocolSet.size;
+            
+            // Count threats
+            const threatCount = packets.filter(p => p.isThreat).length;
+            document.getElementById('threat-count').textContent = threatCount;
+        }
+        
+        function renderProtocolChart() {
+            const ctx = document.getElementById('protocol-chart').getContext('2d');
+            
+            // Count packets by protocol
+            const protocolCounts = {};
+            packets.forEach(packet => {
+                protocolCounts[packet.protocol] = (protocolCounts[packet.protocol] || 0) + 1;
+            });
+            
+            const protocols = Object.keys(protocolCounts);
+            const counts = Object.values(protocolCounts);
+            
+            // Colors for different protocols
+            const backgroundColors = [
+                'rgba(255, 99, 132, 0.7)',
+                'rgba(54, 162, 235, 0.7)',
+                'rgba(255, 206, 86, 0.7)',
+                'rgba(75, 192, 192, 0.7)',
+                'rgba(153, 102, 255, 0.7)',
+                'rgba(255, 159, 64, 0.7)',
+                'rgba(199, 199, 199, 0.7)'
+            ];
+            
+            if (protocolChart) {
+                protocolChart.destroy();
+            }
+            
+            if (chartType === 'pie') {
+                protocolChart = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: protocols,
+                        datasets: [{
+                            data: counts,
+                            backgroundColor: backgroundColors,
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right'
+                            }
+                        }
+                    }
+                });
+            } else {
+                protocolChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: protocols,
+                        datasets: [{
+                            label: 'Packet Count',
+                            data: counts,
+                            backgroundColor: 'rgba(79, 70, 229, 0.7)',
+                            borderColor: 'rgba(79, 70, 229, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        
+        function toggleChartType() {
+            chartType = chartType === 'pie' ? 'bar' : 'pie';
+            chartToggle.innerHTML = chartType === 'pie' 
+                ? '<i class="fas fa-chart-pie mr-1"></i> Pie' 
+                : '<i class="fas fa-chart-bar mr-1"></i> Bar';
+            renderProtocolChart();
+        }
+        
+        function renderPacketTable() {
+            const tableBody = document.getElementById('packet-table-body');
+            tableBody.innerHTML = '';
+            
+            if (filteredPackets.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="px-6 py-4 text-center text-gray-500">No packets match your search criteria</td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            const startIdx = (currentPage - 1) * packetsPerPage;
+            const endIdx = Math.min(startIdx + packetsPerPage, filteredPackets.length);
+            const pagePackets = filteredPackets.slice(startIdx, endIdx);
+            
+            pagePackets.forEach(packet => {
+                const row = document.createElement('tr');
+                row.className = 'packet-row hover:bg-gray-50 cursor-pointer';
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${packet.id}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formatTime(packet.time)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">${packet.source}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">${packet.destination}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            getProtocolColorClass(packet.protocol)
+                        }">
+                            ${packet.protocol}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${packet.length} B</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${packet.info}</td>
+                `;
+                
+                row.addEventListener('click', () => showPacketDetails(packet));
+                tableBody.appendChild(row);
+            });
+            
+            // Update pagination info
+            document.getElementById('packet-start').textContent = startIdx + 1;
+            document.getElementById('packet-end').textContent = endIdx;
+            document.getElementById('packet-total').textContent = filteredPackets.length;
+            
+            // Update pagination buttons
+            prevPage.disabled = currentPage === 1;
+            nextPage.disabled = currentPage === Math.ceil(filteredPackets.length / packetsPerPage);
+        }
+        
+        function getProtocolColorClass(protocol) {
+            const colors = {
+                'TCP': 'bg-blue-100 text-blue-800',
+                'UDP': 'bg-green-100 text-green-800',
+                'HTTP': 'bg-yellow-100 text-yellow-800',
+                'HTTPS': 'bg-purple-100 text-purple-800',
+                'DNS': 'bg-indigo-100 text-indigo-800',
+                'ICMP': 'bg-red-100 text-red-800',
+                'ARP': 'bg-gray-100 text-gray-800'
+            };
+            return colors[protocol] || 'bg-gray-100 text-gray-800';
+        }
+        
+        function formatTime(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleTimeString();
+        }
+        
+        function filterPackets() {
+            const searchTerm = packetSearch.value.toLowerCase();
+            
+            if (!searchTerm) {
+                filteredPackets = [...packets];
+            } else {
+                filteredPackets = packets.filter(packet => 
+                    packet.source.toLowerCase().includes(searchTerm) ||
+                    packet.destination.toLowerCase().includes(searchTerm) ||
+                    packet.protocol.toLowerCase().includes(searchTerm) ||
+                    packet.info.toLowerCase().includes(searchTerm)
+                );
+            }
+            
+            currentPage = 1;
+            renderPacketTable();
+        }
+        
+        function showPacketDetails(packet) {
+            document.getElementById('modal-source').textContent = packet.source;
+            document.getElementById('modal-dest').textContent = packet.destination;
+            document.getElementById('modal-protocol').textContent = packet.protocol;
+            document.getElementById('modal-time').textContent = new Date(packet.time).toLocaleString();
+            document.getElementById('modal-length').textContent = `${packet.length} bytes`;
+            document.getElementById('modal-contents').textContent = packet.contents;
+            
+            packetModal.classList.remove('hidden');
+        }
+        
+        function checkForThreats() {
+            const threatList = document.getElementById('threat-list');
+            threatList.innerHTML = '';
+            
+            const threats = packets.filter(p => p.isThreat);
+            
+            if (threats.length === 0) {
+                threatList.innerHTML = '<p class="text-gray-500">No threats detected in the network traffic.</p>';
+            } else {
+                threats.forEach(threat => {
+                    const threatItem = document.createElement('div');
+                    threatItem.className = 'p-3 rounded-lg bg-red-50 border border-red-200';
+                    threatItem.innerHTML = `
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <h4 class="font-medium text-red-800">${threat.threatType || 'Suspicious Activity'}</h4>
+                                <p class="text-sm text-gray-600">${threat.info}</p>
+                                <div class="mt-2 flex space-x-2">
+                                    <span class="text-xs px-2 py-1 bg-red-100 text-red-800 rounded">${threat.protocol}</span>
+                                    <span class="text-xs px-2 py-1 bg-gray-100 text-gray-800 rounded">Packet #${threat.id}</span>
+                                </div>
+                            </div>
+                            <button class="text-red-600 hover:text-red-800">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </button>
+                        </div>
+                    `;
+                    threatList.appendChild(threatItem);
+                });
+            }
+            
+            threatAnalysis.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
